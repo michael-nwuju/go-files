@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"strings"
@@ -103,7 +103,12 @@ func (s *Store) Has(key string) bool {
 
 	_, err := os.Stat(pathkey.FullPath(s.Root))
 
-	return err != fs.ErrNotExist
+	// return err != fs.ErrNotExist
+	return !errors.Is(err, os.ErrNotExist)
+}
+
+func (s *Store) Clear() error {
+	return os.RemoveAll(s.Root)
 }
 
 func (s *Store) Delete(key string) error {
@@ -138,20 +143,16 @@ func (s *Store) readStream(key string) (io.ReadCloser, error) {
 	return os.Open(pathkey.FullPath(s.Root))
 }
 
+func (s *Store) Write(key string, r io.Reader) error {
+	return s.writeStream(key, r)
+}
+
 func (s *Store) writeStream(key string, r io.Reader) error {
 	pathkey := s.PathTransformer(key)
 
 	if err := os.MkdirAll(pathkey.PathnameWithRoot(s.Root), os.ModePerm); err != nil {
 		return err
 	}
-
-	// buf := new(bytes.Buffer)
-
-	// io.Copy(buf, r)
-
-	// filenameBytes := md5.Sum(buf.Bytes())
-
-	// filename := hex.EncodeToString(filenameBytes[:])
 
 	fullPath := pathkey.FullPath(s.Root)
 

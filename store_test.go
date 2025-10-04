@@ -27,64 +27,84 @@ func TestTransformer(t *testing.T) {
 	}
 }
 
-func TestStoreDeleteKey(t *testing.T) {
-	options := StoreOptions{
-		PathTransformer: ContentAddressiblePathTransformer,
-	}
+// func TestStoreDeleteKey(t *testing.T) {
+// 	options := StoreOptions{
+// 		PathTransformer: ContentAddressiblePathTransformer,
+// 	}
 
-	s := NewStore(options)
+// 	s := NewStore(options)
 
-	key := "momsspecials"
+// 	key := "momsspecials"
 
-	data := []byte("some jpeg bytes")
+// 	data := []byte("some jpeg bytes")
 
-	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
-		t.Error(err)
-	}
+// 	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+// 		t.Error(err)
+// 	}
 
-	if err := s.Delete(key); err != nil {
-		t.Error(err)
-	}
-}
+// 	if err := s.Delete(key); err != nil {
+// 		t.Error(err)
+// 	}
+// }
 
 func TestStore(t *testing.T) {
+	s := newStore()
+
+	defer teardown(t, s)
+
+	for i := 0; i < 50; i++ {
+		key := fmt.Sprintf("foo_%d", i)
+
+		data := []byte("some jpg bytes")
+
+		if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+			t.Error(err)
+		}
+
+		if ok := s.Has(key); !ok {
+			t.Errorf("Expected to have key %s", key)
+		}
+
+		read, err := s.Read(key)
+
+		if err != nil {
+			t.Error(err)
+		}
+
+		// b, readAllErr := ioutil.ReadAll(read)
+		b, readAllErr := io.ReadAll(read)
+
+		if readAllErr != nil {
+			t.Error(readAllErr)
+		}
+
+		fmt.Println(string(b))
+
+		if string(b) != string(data) {
+			t.Errorf("want %s, have %s", data, b)
+		}
+
+		if err := s.Delete(key); err != nil {
+			t.Error(err)
+		}
+
+		if ok := s.Has(key); ok {
+			t.Errorf("Expected to not have key %s", key)
+		}
+	}
+
+}
+
+func newStore() *Store {
 	options := StoreOptions{
 		PathTransformer: ContentAddressiblePathTransformer,
 	}
 
-	s := NewStore(options)
+	return NewStore(options)
+}
 
-	key := "momsspecials"
-
-	data := []byte("some jpeg bytes")
-
-	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+func teardown(t *testing.T, s *Store) {
+	if err := s.Clear(); err != nil {
 		t.Error(err)
 	}
-
-	if ok := s.Has(key); !ok {
-		t.Errorf("Expected to have key %s", key)
-	}
-
-	read, err := s.Read(key)
-
-	if err != nil {
-		t.Error(err)
-	}
-
-	// b, readAllErr := ioutil.ReadAll(read)
-	b, readAllErr := io.ReadAll(read)
-
-	if readAllErr != nil {
-		t.Error(readAllErr)
-	}
-
-	fmt.Println(string(b))
-
-	if string(b) != string(data) {
-		t.Errorf("want %s, have %s", data, b)
-	}
-
-	s.Delete(key)
-
 }

@@ -7,40 +7,92 @@ import (
 	"github.com/michael-nwuju/go-files/p2p"
 )
 
-func OnPeer(peer p2p.Peer) error {
-	fmt.Println("doing some logic with the peer outside of TCPTransport")
+// func OnPeer(peer p2p.Peer) error {
+// 	fmt.Println("doing some logic with the peer outside of TCPTransport")
 
-	if err := peer.Close(); err != nil {
-		return err
+// 	if err := peer.Close(); err != nil {
+// 		return err
+// 	}
+
+// 	return nil
+// 	// return fmt.Errorf("failed the onpeer func")
+// }
+
+// func main() {
+// 	tcpOptions := p2p.TCPTransportOptions{
+// 		ListenAddr: ":3000",
+// 		Decoder:    p2p.DefaultDecoder{},
+// 		Handshake:  p2p.NOPHandshakeFunc,
+// 		OnPeer:     OnPeer,
+// 	}
+
+// 	tr := p2p.NewTCPTransport(tcpOptions)
+
+// 	go func() {
+// 		for {
+// 			msg := <-tr.Consume()
+
+// 			fmt.Printf("Consuming info here - %+v\n", msg)
+// 		}
+// 	}()
+
+// 	if err := tr.ListenAndAccept(); err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	fmt.Println("We up!")
+
+// 	select {}
+// }
+
+func makeServer(listenAddr string, nodes []string) *FileServer {
+	tcpTransportOptions := p2p.TCPTransportOptions{
+		ListenAddr: listenAddr,
+		Handshake:  p2p.NOPHandshakeFunc,
+		Decoder:    p2p.DefaultDecoder{},
+		// #TODO: add on peer function
 	}
 
-	return nil
-	// return fmt.Errorf("failed the onpeer func")
+	fileServerOptions := FileServerOptions{
+		BootstrapNodes:      nodes,
+		TCPTransportOptions: tcpTransportOptions,
+		PathTransformer:     ContentAddressiblePathTransformer,
+		StorageRoot:         fmt.Sprintf("%s_network", listenAddr[1:]),
+	}
+
+	server := NewFileServer(fileServerOptions)
+
+	tcpTransportOptions.OnPeer = server.OnPeer
+
+	fileServerOptions.TCPTransportOptions = tcpTransportOptions
+
+	server = NewFileServer(fileServerOptions)
+
+	return server
 }
 
 func main() {
-	tcpOptions := p2p.TCPTransportOptions{
-		ListenAddr: ":3000",
-		Decoder:    p2p.DefaultDecoder{},
-		Handshake:  p2p.NOPHandshakeFunc,
-		OnPeer:     OnPeer,
-	}
+	s1 := makeServer(":3000", []string{})
 
-	tr := p2p.NewTCPTransport(tcpOptions)
+	s2 := makeServer(":4000", []string{":3000"})
 
 	go func() {
-		for {
-			msg := <-tr.Consume()
-
-			fmt.Printf("Consuming info here - %+v\n", msg)
+		if err := s1.Start(); err != nil {
+			log.Fatal(err)
 		}
 	}()
 
-	if err := tr.ListenAndAccept(); err != nil {
-		log.Fatal(err)
-	}
+	s2.Start()
 
-	fmt.Println("We up!")
+	// go func() {
+	// 	time.Sleep(time.Second * 3)
 
-	select {}
+	// 	s.Stop()
+	// }()
+
+	// if err := s.Start(); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// select {}
 }

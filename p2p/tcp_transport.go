@@ -1,7 +1,9 @@
 package p2p
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"net"
 )
 
@@ -44,6 +46,17 @@ func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	}
 }
 
+func (p *TCPPeer) Send(b []byte) error {
+	_, err := p.conn.Write(b)
+
+	return err
+}
+
+// RemoteAddr implements the Peer interface and will return the remote address of its underlying connection
+func (p *TCPPeer) RemoteAddr() net.Addr {
+	return p.conn.RemoteAddr()
+}
+
 // Close implements the peer interface
 func (p *TCPPeer) Close() error {
 	return p.conn.Close()
@@ -63,6 +76,25 @@ func (t *TCPTransport) Consume() <-chan RPC {
 	return t.rpcChannel
 }
 
+// Close implements the Transport Interface.
+func (t *TCPTransport) Close() error {
+	return t.listener.Close()
+}
+
+// Dial implements the Transport Interface.
+func (t *TCPTransport) Dial(addr string) error {
+	conn, err := net.Dial("tcp", addr)
+
+	if err != nil {
+		return err
+	}
+	fmt.Printf("TCP is dialing another server from Listen Address - %s\n", t.ListenAddr)
+
+	go t.handleConn(conn, true)
+
+	return err
+}
+
 func (t *TCPTransport) ListenAndAccept() error {
 	ln, err := net.Listen("tcp", t.ListenAddr)
 
@@ -74,6 +106,8 @@ func (t *TCPTransport) ListenAndAccept() error {
 
 	go t.startAcceptLoop()
 
+	log.Printf("TCP Transport listening on port: %s\n", t.ListenAddr)
+
 	return nil
 }
 
@@ -81,16 +115,22 @@ func (t *TCPTransport) startAcceptLoop() {
 	for {
 		conn, err := t.listener.Accept()
 
+		if errors.Is(err, net.ErrClosed) {
+			return
+		}
+
 		if err != nil {
 			fmt.Printf("TCP accept error: %s\n", err)
 		}
 
-		go t.handleConn(conn)
+		fmt.Printf("TCP is accepting loop on Listen Address - %s\n", t.ListenAddr)
+
+		go t.handleConn(conn, false)
 	}
 }
 
-func (t *TCPTransport) handleConn(conn net.Conn) {
-	peer := NewTCPPeer(conn, true)
+func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
+	peer := NewTCPPeer(conn, outbound)
 
 	var err error
 
@@ -113,7 +153,7 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 		}
 	}
 
-	fmt.Printf("new incoming connection %+v\n", peer)
+	// fmt.Printf("new incoming connection %+v\n", peer)
 
 	rpc := RPC{}
 
