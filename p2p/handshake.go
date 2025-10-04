@@ -14,3 +14,7 @@ type HandshakeFunc func(Peer) error
 func NOPHandshakeFunc(Peer) error {
 	return nil
 }
+
+// // ErrorInvalidHandshake is returned when the handshakes
+// // between local & remote nodes could not be established
+// var ErrorInvalidHandshake = errors.New("invalid handshake")
