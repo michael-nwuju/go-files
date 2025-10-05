@@ -4,11 +4,13 @@ import "net"
 
 // Peer is an interface that represents the remote node
 type Peer interface {
+	net.Conn
+
 	Send([]byte) error
 
-	RemoteAddr() net.Addr
+	// RemoteAddr() net.Addr
 
-	Close() error
+	// Close() error
 }
 
 // Transport is anything that handles the communication between the nodes in the network
@@ -21,4 +23,6 @@ type Transport interface {
 	Consume() <-chan RPC
 
 	Close() error
+
+	// ListenAddr() string
 }
