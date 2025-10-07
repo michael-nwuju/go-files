@@ -10,12 +10,13 @@ import (
 	"github.com/michael-nwuju/go-files/p2p"
 )
 
-func makeServer(listenAddr string, nodes []string) *FileServer {
+func makeServer(StoreID, listenAddr string, nodes []string) *FileServer {
 	fileServerOptions := FileServerOptions{
 		StorageRoot:     fmt.Sprintf("%s_network", listenAddr[1:]),
 		PathTransformer: ContentAddressiblePathTransformer,
 		BootstrapNodes:  nodes,
 		EncryptionKey:   newEncryptionKey(),
+		StoreID:         StoreID,
 	}
 
 	server := NewFileServer(fileServerOptions)
@@ -34,11 +35,13 @@ func makeServer(listenAddr string, nodes []string) *FileServer {
 }
 
 func main() {
-	s1 := makeServer(":3000", []string{})
+	storeID := generateID()
 
-	s2 := makeServer(":4000", []string{":3000"})
+	s1 := makeServer(storeID, ":3000", []string{})
 
-	s3 := makeServer(":5001", []string{":3000", ":4000"})
+	s2 := makeServer(storeID, ":4000", []string{":3000"})
+
+	s3 := makeServer(storeID, ":5001", []string{":3000", ":4000"})
 
 	go func() {
 		log.Fatal(s1.Start())

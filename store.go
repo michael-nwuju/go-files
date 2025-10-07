@@ -11,6 +11,9 @@ import (
 	"strings"
 )
 
+// filename => clown.jpg
+// path => transform(key) => ROOT/[id]/path
+
 const DefaultRootFolderName string = "files"
 
 func ContentAddressiblePathTransformer(key string) Pathkey {
@@ -48,22 +51,22 @@ func (p Pathkey) FullPathWithoutRoot() string {
 	return fmt.Sprintf("%s/%s", p.Pathname, p.Filename)
 }
 
-func (p Pathkey) FullPath(root string) string {
-	return fmt.Sprintf("%s/%s/%s", root, p.Pathname, p.Filename)
+func (p Pathkey) FullPath(root string, id string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", root, id, p.Pathname, p.Filename)
 }
 
-func (p Pathkey) PathnameWithRoot(root string) string {
-	return fmt.Sprintf("%s/%s", root, p.Pathname)
+func (p Pathkey) PathnameWithRoot(root string, id string) string {
+	return fmt.Sprintf("%s/%s/%s", root, id, p.Pathname)
 }
 
-func (p Pathkey) FirstPathname(root string) string {
+func (p Pathkey) FirstPathname(root string, id string) string {
 	paths := strings.Split(p.Pathname, "/")
 
 	if len(paths) == 0 {
 		return ""
 	}
 
-	return fmt.Sprintf("%s/%s", root, paths[0])
+	return fmt.Sprintf("%s/%s/%s", root, id, paths[0])
 }
 
 var DefaultPathTransformer = func(key string) Pathkey {
@@ -74,10 +77,14 @@ var DefaultPathTransformer = func(key string) Pathkey {
 }
 
 type StoreOptions struct {
-	// Folder name of the root,
-	// containing all the files/folders of the system
-	Root            string
+	// Folder name of the root containing all the files/folders of the system
+	Root string
+
 	PathTransformer PathTransformer
+
+	// ID of the owner of the storage, which will be used to store all files in the location
+	// so we can sync all the files needed
+	ID string
 }
 
 type Store struct {
@@ -92,6 +99,11 @@ func NewStore(options StoreOptions) *Store {
 	if len(options.Root) == 0 {
 		options.Root = DefaultRootFolderName
 	}
+
+	if len(options.ID) == 0 {
+		options.ID = generateID()
+	}
+
 	return &Store{
 		StoreOptions: options,
 	}
@@ -100,7 +112,7 @@ func NewStore(options StoreOptions) *Store {
 func (s *Store) Has(key string) bool {
 	pathkey := s.PathTransformer(key)
 
-	_, err := os.Stat(pathkey.FullPath(s.Root))
+	_, err := os.Stat(pathkey.FullPath(s.Root, s.ID))
 
 	// return err != fs.ErrNotExist
 	return !errors.Is(err, os.ErrNotExist)
@@ -114,10 +126,10 @@ func (s *Store) Delete(key string) error {
 	pathKey := s.PathTransformer(key)
 
 	defer func() {
-		log.Printf("deleted [%s] from disk", pathKey.FirstPathname(s.Root))
+		log.Printf("deleted [%s] from disk", pathKey.FirstPathname(s.Root, s.ID))
 	}()
 
-	return os.RemoveAll(pathKey.FirstPathname(s.Root))
+	return os.RemoveAll(pathKey.FirstPathname(s.Root, s.ID))
 }
 
 func (s *Store) Read(key string) (int64, io.Reader, error) {
@@ -127,7 +139,7 @@ func (s *Store) Read(key string) (int64, io.Reader, error) {
 func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
 	pathkey := s.PathTransformer(key)
 
-	file, err := os.Open(pathkey.FullPath(s.Root))
+	file, err := os.Open(pathkey.FullPath(s.Root, s.ID))
 
 	if err != nil {
 		return 0, nil, err
@@ -162,11 +174,11 @@ func (s *Store) WriteDecrypt(encryptionKey []byte, key string, r io.Reader) (int
 func (s *Store) openFileForWriting(key string) (*os.File, error) {
 	pathkey := s.PathTransformer(key)
 
-	if err := os.MkdirAll(pathkey.PathnameWithRoot(s.Root), os.ModePerm); err != nil {
+	if err := os.MkdirAll(pathkey.PathnameWithRoot(s.Root, s.ID), os.ModePerm); err != nil {
 		return nil, err
 	}
 
-	fullPath := pathkey.FullPath(s.Root)
+	fullPath := pathkey.FullPath(s.Root, s.ID)
 
 	return os.Create(fullPath)
 }

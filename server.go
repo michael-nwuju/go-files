@@ -23,6 +23,8 @@ type FileServerOptions struct {
 	BootstrapNodes []string
 
 	EncryptionKey []byte
+
+	StoreID string
 }
 
 type FileServer struct {
@@ -45,7 +47,11 @@ func NewFileServer(options FileServerOptions) *FileServer {
 		quitChannel:       make(chan struct{}),
 		peers:             make(map[string]p2p.Peer),
 		Transport:         p2p.NewTCPTransport(options.TCPTransportOptions),
-		store:             NewStore(StoreOptions{Root: options.StorageRoot, PathTransformer: options.PathTransformer}),
+		store: NewStore(StoreOptions{
+			ID:              options.StoreID,
+			Root:            options.StorageRoot,
+			PathTransformer: options.PathTransformer,
+		}),
 	}
 }
 
@@ -95,7 +101,7 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 
 	msg := Message{
 		Payload: MessageGetFile{
-			Key: key,
+			Key: hashKey(key),
 		},
 	}
 
@@ -151,7 +157,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 
 	message := Message{
 		Payload: MessageStoreFile{
-			Key:  key,
+			Key:  hashKey(key),
 			Size: size + 16,
 		},
 	}
@@ -179,25 +185,6 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	}
 
 	fmt.Printf("[%s] received and written (%d) bytes to disk\n", s.Transport.Addr(), n)
-
-	// // #TODO: Use a multiwriter here.
-	// for _, peer := range s.peers {
-	// 	peer.Send([]byte{p2p.IncomingStream})
-
-	// 	n, err := copyEncrypt(s.EncryptionKey, fileBuffer, peer)
-
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	// n, err := io.Copy(peer, fileBuffer)
-
-	// 	// if err != nil {
-	// 	// 	return err
-	// 	// }
-
-	// 	fmt.Printf("received and written bytes to disk: %d\n", n)
-	// }
 
 	return nil
 }
