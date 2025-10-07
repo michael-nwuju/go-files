@@ -8,6 +8,8 @@ type Peer interface {
 
 	Send([]byte) error
 
+	CloseStream()
+
 	// RemoteAddr() net.Addr
 
 	// Close() error
@@ -16,6 +18,8 @@ type Peer interface {
 // Transport is anything that handles the communication between the nodes in the network
 // This can be of the form TCP, UDP, Websockets
 type Transport interface {
+	Addr() string
+
 	Dial(string) error
 
 	ListenAndAccept() error
