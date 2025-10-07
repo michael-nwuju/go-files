@@ -120,25 +120,8 @@ func (s *Store) Delete(key string) error {
 	return os.RemoveAll(pathKey.FirstPathname(s.Root))
 }
 
-// Fixed
 func (s *Store) Read(key string) (int64, io.Reader, error) {
 	return s.readStream(key)
-
-	// #FIXME: Instead of copying directly to a reader we first copy this into
-	// a buffer. Maybe just return the file from readstream?
-	// n, file, err := s.readStream(key)
-
-	// if err != nil {
-	// 	return 0, nil, err
-	// }
-
-	// defer file.Close()
-
-	// buf := new(bytes.Buffer)
-
-	// _, err = io.Copy(buf, file)
-
-	// return n, buf, err
 }
 
 func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
@@ -164,26 +147,37 @@ func (s *Store) Write(key string, r io.Reader) (int64, error) {
 	return s.writeStream(key, r)
 }
 
-func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
+func (s *Store) WriteDecrypt(encryptionKey []byte, key string, r io.Reader) (int64, error) {
+	file, err := s.openFileForWriting(key)
+
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := copyDecrypt(encryptionKey, r, file)
+
+	return int64(n), err
+}
+
+func (s *Store) openFileForWriting(key string) (*os.File, error) {
 	pathkey := s.PathTransformer(key)
 
 	if err := os.MkdirAll(pathkey.PathnameWithRoot(s.Root), os.ModePerm); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	fullPath := pathkey.FullPath(s.Root)
 
-	file, err := os.Create(fullPath)
+	return os.Create(fullPath)
+}
+
+func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
+
+	file, err := s.openFileForWriting(key)
 
 	if err != nil {
 		return 0, err
 	}
 
-	n, err := io.Copy(file, r)
-
-	if err != nil {
-		return 0, err
-	}
-
-	return n, nil
+	return io.Copy(file, r)
 }

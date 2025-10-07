@@ -21,6 +21,8 @@ type FileServerOptions struct {
 	TCPTransportOptions p2p.TCPTransportOptions
 
 	BootstrapNodes []string
+
+	EncryptionKey []byte
 }
 
 type FileServer struct {
@@ -45,18 +47,6 @@ func NewFileServer(options FileServerOptions) *FileServer {
 		Transport:         p2p.NewTCPTransport(options.TCPTransportOptions),
 		store:             NewStore(StoreOptions{Root: options.StorageRoot, PathTransformer: options.PathTransformer}),
 	}
-}
-
-func (s *FileServer) stream(msg *Message) error {
-	peers := []io.Writer{}
-
-	for _, peer := range s.peers {
-		peers = append(peers, peer)
-	}
-
-	mw := io.MultiWriter(peers...)
-
-	return gob.NewEncoder(mw).Encode(msg)
 }
 
 func (s *FileServer) broadcast(msg *Message) error {
@@ -123,7 +113,11 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 
 		binary.Read(peer, binary.LittleEndian, &fileSize)
 
-		n, err := s.store.Write(key, io.LimitReader(peer, fileSize))
+		fmt.Printf("file size - %d", fileSize)
+
+		// n, err := s.store.Write(key, io.LimitReader(peer, fileSize))
+
+		n, err := s.store.WriteDecrypt(s.EncryptionKey, key, io.LimitReader(peer, fileSize))
 
 		if err != nil {
 			return nil, err
@@ -158,7 +152,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	message := Message{
 		Payload: MessageStoreFile{
 			Key:  key,
-			Size: size,
+			Size: size + 16,
 		},
 	}
 
@@ -168,18 +162,42 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 
 	time.Sleep(5 * time.Millisecond)
 
-	// #TODO: Use a multiwriter here.
+	peers := []io.Writer{}
+
 	for _, peer := range s.peers {
-		peer.Send([]byte{p2p.IncomingStream})
-
-		n, err := io.Copy(peer, fileBuffer)
-
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("received and written bytes to disk: %d\n", n)
+		peers = append(peers, peer)
 	}
+
+	multiwriter := io.MultiWriter(peers...)
+
+	multiwriter.Write([]byte{p2p.IncomingStream})
+
+	n, err := copyEncrypt(s.EncryptionKey, fileBuffer, multiwriter)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("[%s] received and written (%d) bytes to disk\n", s.Transport.Addr(), n)
+
+	// // #TODO: Use a multiwriter here.
+	// for _, peer := range s.peers {
+	// 	peer.Send([]byte{p2p.IncomingStream})
+
+	// 	n, err := copyEncrypt(s.EncryptionKey, fileBuffer, peer)
+
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	// n, err := io.Copy(peer, fileBuffer)
+
+	// 	// if err != nil {
+	// 	// 	return err
+	// 	// }
+
+	// 	fmt.Printf("received and written bytes to disk: %d\n", n)
+	// }
 
 	return nil
 }
@@ -313,11 +331,11 @@ func (s *FileServer) bootstrapNetwork() error {
 			continue
 		}
 
-		fmt.Printf("bootstrapping address %s\n", addr)
-
 		go func(addr string) {
+			fmt.Printf("[%s] attempting to connect with remote: %s\n", s.Transport.Addr(), addr)
+
 			if err := s.Transport.Dial(addr); err != nil {
-				log.Printf("dial error: %v", err)
+				log.Printf("[%s] dial error: %v", s.Transport.Addr(), err)
 			}
 		}(addr)
 	}
@@ -331,6 +349,8 @@ func init() {
 }
 
 func (s *FileServer) Start() error {
+	fmt.Printf("[%s] starting file server\n", s.Transport.Addr())
+
 	if err := s.Transport.ListenAndAccept(); err != nil {
 		return err
 	}

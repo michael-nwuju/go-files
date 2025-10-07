@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,7 @@ func makeServer(listenAddr string, nodes []string) *FileServer {
 		StorageRoot:     fmt.Sprintf("%s_network", listenAddr[1:]),
 		PathTransformer: ContentAddressiblePathTransformer,
 		BootstrapNodes:  nodes,
+		EncryptionKey:   newEncryptionKey(),
 	}
 
 	server := NewFileServer(fileServerOptions)
@@ -36,41 +38,52 @@ func main() {
 
 	s2 := makeServer(":4000", []string{":3000"})
 
+	s3 := makeServer(":5001", []string{":3000", ":4000"})
+
 	go func() {
 		log.Fatal(s1.Start())
 	}()
 
+	time.Sleep(1 * time.Second)
+
+	go func() {
+		log.Fatal(s2.Start())
+	}()
+
+	time.Sleep(1 * time.Second)
+
+	go func() {
+		log.Fatal(s3.Start())
+	}()
+
 	time.Sleep(2 * time.Second)
 
-	go s2.Start()
+	for i := 0; i < 20; i++ {
+		key := fmt.Sprintf("picture_%d.png", i)
 
-	time.Sleep(2 * time.Second)
+		data := bytes.NewReader([]byte("my big data file here!"))
 
-	// for i := 0; i < 10; i++ {
-	// 	data := bytes.NewReader([]byte("my big data file here"))
+		s3.Store(key, data)
 
-	// 	s2.Store(fmt.Sprintf("myprivatedata_%d", i), data)
+		if err := s3.store.Delete(key); err != nil {
+			log.Fatal(err)
+		}
 
-	// 	time.Sleep(5 * time.Millisecond)
-	// }
+		r, err := s3.Get(key)
 
-	// data := bytes.NewReader([]byte("my big data file here"))
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	// s2.Store("coolPicture.jpg", data)
+		b, err := io.ReadAll(r)
 
-	// time.Sleep(5 * time.Millisecond)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	r, err := s2.Get("coolPicture.jpg")
+		fmt.Println(string(b))
 
-	if err != nil {
-		log.Fatal(err)
+		time.Sleep(5 * time.Millisecond)
 	}
 
-	b, err := io.ReadAll(r)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	println(string(b))
 }
