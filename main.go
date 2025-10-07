@@ -61,7 +61,7 @@ func main() {
 
 	time.Sleep(2 * time.Second)
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 3; i++ {
 		key := fmt.Sprintf("picture_%d.png", i)
 
 		data := bytes.NewReader([]byte("my big data file here!"))
@@ -88,5 +88,16 @@ func main() {
 
 		time.Sleep(5 * time.Millisecond)
 	}
+
+	fmt.Println("")
+	fmt.Println("Sleeping before deleting file")
+
+	time.Sleep(2 * time.Second)
+
+	fmt.Println("")
+
+	fmt.Println("Deleting middle file")
+
+	s3.Delete("picture_1.png")
 
 }

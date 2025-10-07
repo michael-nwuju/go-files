@@ -89,6 +89,10 @@ type MessageGetFile struct {
 	Key string
 }
 
+type MessageDeleteFile struct {
+	Key string
+}
+
 func (s *FileServer) Get(key string) (io.Reader, error) {
 	if s.store.Has(key) {
 		fmt.Printf("[%s] serving file (%s) from local disk\n", s.Transport.Addr(), key)
@@ -189,6 +193,28 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	return nil
 }
 
+func (s *FileServer) Delete(key string) error {
+	if s.store.Has(key) {
+		if err := s.store.Delete(key); err != nil {
+			return err
+		}
+	}
+
+	fmt.Printf("[%s] telling other peers to delete file - %s\n", s.Transport.Addr(), key)
+
+	message := Message{
+		Payload: MessageDeleteFile{
+			Key: key,
+		},
+	}
+
+	if err := s.broadcast(&message); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *FileServer) Stop() {
 	close(s.quitChannel)
 }
@@ -242,6 +268,8 @@ func (s *FileServer) handleMessage(from string, msg *Message) error {
 		return s.handleMessageStoreFile(from, v)
 	case MessageGetFile:
 		return s.handleMessageGetFile(from, v)
+	case MessageDeleteFile:
+		return s.handleMessageDeleteFile(from, v)
 	}
 
 	return nil
@@ -312,6 +340,26 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 	return nil
 }
 
+func (s *FileServer) handleMessageDeleteFile(from string, msg MessageDeleteFile) error {
+	fmt.Printf("[%s] deleting file [%s] on this server\n", from, msg.Key)
+
+	_, ok := s.peers[from]
+
+	if !ok {
+		return fmt.Errorf("peer (%s) could not be found in peer list", from)
+	}
+
+	if s.store.Has(hashKey(msg.Key)) {
+		if err := s.store.Delete(hashKey(msg.Key)); err != nil {
+			return err
+		}
+	}
+
+	log.Printf("[%s] Deleted file (%s) from disk\n", s.Transport.Addr(), msg.Key)
+
+	return nil
+}
+
 func (s *FileServer) bootstrapNetwork() error {
 	for _, addr := range s.BootstrapNodes {
 		if len(addr) == 0 {
@@ -333,6 +381,7 @@ func (s *FileServer) bootstrapNetwork() error {
 func init() {
 	gob.Register(MessageStoreFile{})
 	gob.Register(MessageGetFile{})
+	gob.Register(MessageDeleteFile{})
 }
 
 func (s *FileServer) Start() error {

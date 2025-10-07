@@ -112,6 +112,10 @@ func NewStore(options StoreOptions) *Store {
 func (s *Store) Has(key string) bool {
 	pathkey := s.PathTransformer(key)
 
+	// println(pathkey.FullPath(s.Root, s.ID))
+
+	// println(s.ID)
+
 	_, err := os.Stat(pathkey.FullPath(s.Root, s.ID))
 
 	// return err != fs.ErrNotExist
